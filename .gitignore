@@ -1,0 +1,58 @@
+# ── OS / editor cruft ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+
+# ── Node / node-gpac-dash ──────────────────────────────────────────
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# ── Python (for any helper / plotting scripts) ─────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# ── FFmpeg build artifacts (we keep the patch, not the binaries) ───
+ffmpeg-patch/ffmpeg/
+ffmpeg-patch/ffmpeg_sources/
+ffmpeg-patch/ffmpeg_build/
+ffmpeg-patch/bin/
+*.o
+*.a
+*.so
+
+# ── Streaming output / generated media (HUGE, never commit) ────────
+ldash/
+dash_output/
+*.mpd
+*.m4s
+*.mp4
+*.ts
+*.flv
+*.webm
+
+# ── NGINX runtime files ────────────────────────────────────────────
+server/nginx/logs/
+server/nginx/temp/
+*.pid
+
+# ── Experiment raw recordings (keep CSVs and plots, skip videos) ───
+experiments/**/raw/
+experiments/**/*.mkv
+experiments/**/*.mp4
+experiments/**/*.png
+!experiments/**/*plot*.png
+!experiments/**/*graph*.png
+!experiments/**/*chart*.png
+
+# ── Local secrets / per-machine config ─────────────────────────────
+.env
+.env.local
+config.local.*
