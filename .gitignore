@@ -56,3 +56,5 @@ experiments/**/*.png
 .env
 .env.local
 config.local.*
+
+notes.md
