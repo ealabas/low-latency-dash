@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Low Latency DASH Player</title>
+    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        video {
+            width: 80%;
+            max-width: 960px;
+            background: #000;
+        }
+        h1 { margin-bottom: 10px; }
+        #info {
+            margin-top: 15px;
+            font-size: 18px;
+            color: #0f0;
+            display: flex;
+            gap: 40px;
+            align-items: center;
+        }
+        #system-clock {
+            font-size: 72px;
+            font-weight: bold;
+            color: #ff0;
+            margin-top: 15px;
+            font-family: monospace;
+        }
+        #latency-value {
+            font-size: 24px;
+            color: #0f0;
+        }
+        .label {
+            font-size: 14px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>Low Latency DASH Player</h1>
+    <video id="videoPlayer" controls autoplay muted></video>
+    <div id="system-clock"></div>
+    <div class="label">Current system time — compare with the clock in the video</div>
+    <div id="info">
+        <div>
+            <div class="label">dash.js live edge latency</div>
+            <div id="latency-value">--</div>
+        </div>
+    </div>
+
+    <script>
+        var url = "http://localhost:8000/ldash/1.mpd";
+        var player = dashjs.MediaPlayer().create();
+
+		player.updateSettings({
+            streaming: {
+                delay: {
+                    liveDelay: 0
+                },
+                liveCatchup: {
+                    enabled: false
+                },
+                buffer: {
+                    stableBufferTime: 4,
+                    bufferTimeAtTopQuality: 4
+                }
+            }
+        });
+
+        player.initialize(
+            document.querySelector("#videoPlayer"),
+            url,
+            true
+        );
+
+        // Update system clock every 100ms
+        function updateClock() {
+            var now = new Date();
+            var h = String(now.getHours()).padStart(2, '0');
+            var m = String(now.getMinutes()).padStart(2, '0');
+            var s = String(now.getSeconds()).padStart(2, '0');
+			var ms = String(now.getMilliseconds()).padStart(3, '0'); 
+            document.getElementById("system-clock").textContent = h + ":" + m + ":" + s + "." + ms;
+        }
+        setInterval(updateClock, 100);
+        updateClock();
+
+        // Update dash.js latency
+        setInterval(function () {
+            if (player.isDynamic()) {
+                var latency = player.getCurrentLiveLatency();
+                document.getElementById("latency-value").textContent =
+                    latency.toFixed(2) + " sec (live edge only, not end-to-end)";
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
