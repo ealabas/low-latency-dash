@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Low Latency DASH Player</title>
+    <title>Low Latency DASH Player - CS 418</title>
     <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body {
             background: #1a1a1a;
@@ -20,14 +21,6 @@
             background: #000;
         }
         h1 { margin-bottom: 10px; }
-        #info {
-            margin-top: 15px;
-            font-size: 18px;
-            color: #0f0;
-            display: flex;
-            gap: 40px;
-            align-items: center;
-        }
         #system-clock {
             font-size: 72px;
             font-weight: bold;
@@ -35,73 +28,155 @@
             margin-top: 15px;
             font-family: monospace;
         }
-        #latency-value {
-            font-size: 24px;
-            color: #0f0;
-        }
         .label {
-            font-size: 14px;
-            color: #999;
+            font-size: 13px;
+            color: #8F8F8F;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        #latency-grid {
+            margin-top: 25px;
+            display: flex;
+            gap: 80px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .metric {
+            text-align: center;
+        }
+        .value {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 36px;
+        }
+        #e2e-current { color: #ffffff; }
+        #e2e-avg { color: #ffffff; }
+        #dashjs-latency { color: #ffffff; font-size: 36px; }
+        #sample-count {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #8F8F8F;
         }
     </style>
 </head>
 <body>
-    <h1>Low Latency DASH Player</h1>
+    <h1>Low Latency DASH Player - CS 418</h1>
     <video id="videoPlayer" controls autoplay muted></video>
-    <div id="system-clock"></div>
-    <div class="label">Current system time — compare with the clock in the video</div>
-    <div id="info">
-        <div>
-            <div class="label">dash.js live edge latency</div>
-            <div id="latency-value">--</div>
+    <canvas id="qr-canvas" hidden></canvas>
+
+    <div id="system-clock">--:--:--.---</div>
+    <div class="label">Current system time</div>
+
+    <div id="latency-grid">
+        <div class="metric">
+            <div class="label">End-to-End Delay (Current)</div>
+            <div id="e2e-current" class="value">--</div>
+        </div>
+        <div class="metric">
+            <div class="label">End-to-End Delay (Avg over 10s)</div>
+            <div id="e2e-avg" class="value">--</div>
+        </div>
+        <div class="metric">
+            <div class="label">dash.js Live Edge Delay</div>
+            <div id="dashjs-latency" class="value">--</div>
         </div>
     </div>
+    <div id="sample-count">0 QR samples in window</div>
 
     <script>
+        // DASH player
         var url = "http://localhost:8000/ldash/1.mpd";
         var player = dashjs.MediaPlayer().create();
-
-		player.updateSettings({
+        player.updateSettings({
             streaming: {
-                delay: {
-                    liveDelay: 0
-                },
-                liveCatchup: {
-                    enabled: false
-                },
+                delay: { liveDelay: 0 },
+                liveCatchup: { enabled: false },
                 buffer: {
-                    stableBufferTime: 4,
-                    bufferTimeAtTopQuality: 4
+                    bufferTimeAtTopQuality: 4,
+                    bufferToKeep: 4
                 }
             }
         });
+        player.initialize(document.querySelector("#videoPlayer"), url, true);
 
-        player.initialize(
-            document.querySelector("#videoPlayer"),
-            url,
-            true
-        );
-
-        // Update system clock every 100ms
+        // System clock
         function updateClock() {
             var now = new Date();
             var h = String(now.getHours()).padStart(2, '0');
             var m = String(now.getMinutes()).padStart(2, '0');
             var s = String(now.getSeconds()).padStart(2, '0');
-			var ms = String(now.getMilliseconds()).padStart(3, '0'); 
-            document.getElementById("system-clock").textContent = h + ":" + m + ":" + s + "." + ms;
+            var ms = String(now.getMilliseconds()).padStart(3, '0');
+            document.getElementById("system-clock").textContent =
+                h + ":" + m + ":" + s + "." + ms;
         }
-        setInterval(updateClock, 100);
+        setInterval(updateClock, 50);
         updateClock();
 
-        // Update dash.js latency
+        // dash.js live edge latency
         setInterval(function () {
             if (player.isDynamic()) {
                 var latency = player.getCurrentLiveLatency();
-                document.getElementById("latency-value").textContent =
-                    latency.toFixed(2) + " sec (live edge only, not end-to-end)";
+                document.getElementById("dashjs-latency").textContent =
+                    latency.toFixed(2) + " sec";
             }
         }, 1000);
+
+        // QR-based end-to-end delay with 10s window
+        const video = document.getElementById("videoPlayer");
+        const canvas = document.getElementById("qr-canvas");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+        const currentEl = document.getElementById("e2e-current");
+        const avgEl     = document.getElementById("e2e-avg");
+        const countEl   = document.getElementById("sample-count");
+
+        let samples = [];
+        const WINDOW_MS = 10000;
+
+        function updateStats() {
+            const cutoff = Date.now() - WINDOW_MS;
+            samples = samples.filter(s => s.capturedAt >= cutoff);
+
+            countEl.textContent = `${samples.length} QR samples in window`;
+
+            if (samples.length === 0) {
+                avgEl.textContent = "--";
+                return;
+            }
+
+            const sum = samples.reduce((a, s) => a + s.latencyMs, 0);
+            const avg = sum / samples.length;
+            avgEl.textContent = (avg / 1000).toFixed(3) + " sec";
+        }
+
+        setInterval(updateStats, 250);
+
+        // QR decode every 500ms
+        setInterval(() => {
+            if (video.readyState < 2 || video.videoWidth === 0) return;
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+            if (!code) return;
+
+            const qrTime = parseFloat(code.data);
+            if (isNaN(qrTime)) return;
+
+            const now = Date.now();
+            const latencyMs = now - qrTime;
+
+            // if (latencyMs < 0 || latencyMs >= 30000) return;
+
+            currentEl.textContent = (latencyMs / 1000).toFixed(3) + " sec";
+            samples.push({ capturedAt: now, latencyMs: latencyMs });
+        }, 100);
     </script>
 </body>
 </html>
